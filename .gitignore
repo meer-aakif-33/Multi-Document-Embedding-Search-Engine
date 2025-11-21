@@ -1,0 +1,5 @@
+data/
+*.db
+faiss.index
+venv/
+__pycache__/
