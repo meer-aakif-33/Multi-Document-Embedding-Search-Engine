@@ -217,8 +217,6 @@ Unit tests are placed under:
 tests/
 ```
 
-(Will be added next.)
-
 ---
 
 ## 📌 Next Steps (Bonus Features)
