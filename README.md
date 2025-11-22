@@ -289,24 +289,6 @@ Located in:
 tests/
 ```
 
-<<<<<<< HEAD
-Covers:
-
-* Loader  
-* Embedder  
-* Cache  
-* Search pipeline  
-
-Run:
-
-```
-pytest -q
-```
-
-=======
->>>>>>> 491f6bddcd2522ed0deb266549c125cfe8f0d5ab
----
-
 ## 💽 How Caching Works (Detailed)
 
 1. Load documents  
