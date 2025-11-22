@@ -311,20 +311,6 @@ tests/
 
 ---
 
-## 🧩 Next Optional Enhancements
-
-### ✔ Already Implemented:
-* Streamlit UI  
-* Persistent FAISS index  
-* Multiprocessing batch embedding  
-* Evaluation queries  
-* Unit tests  
-
-### ❌ Pending (Optional Bonus):
-* Query expansion (WordNet or embedding-based)  
-
----
-
 ## ✔️ Assignment Compliance
 
 ### All Mandatory Requirements — **DONE**  
