@@ -5,3 +5,4 @@ faiss-cpu
 numpy
 pydantic
 streamlit
+pytest
