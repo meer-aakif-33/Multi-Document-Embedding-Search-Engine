@@ -1,9 +1,12 @@
+#search_engine
 from typing import List, Dict, Any
 import numpy as np
+
+from src.utils.hashing import sha256_text
 from ..cache.cache_manager import CacheManager
 from ..embedder.embedder import Embedder
 from ..indexer.faiss_index import FaissIndex
-
+from ..embedder.batch_embedder import embed_batch_multiprocess
 
 class SearchEngine:
     def __init__(self, embedder: Embedder, cache: CacheManager, dim: int, index_path: str = "faiss.index"):
@@ -13,25 +16,52 @@ class SearchEngine:
         self.metadata = {}  # doc_id -> {text, length, filename}
 
     def index_documents(self, docs: List[Dict]):
-        # docs are dicts with doc_id, text, hash, length, filename
+        """
+        Build embeddings for all docs:
+        - Use cache when possible
+        - Use batch multiprocessing for uncached docs
+        - Always store metadata
+        """
+        texts_to_embed = []
+        ids_to_embed = []
+        hashes_to_embed = []
+
         embeddings = []
         doc_ids = []
+
+        # STEP 1 — Collect cached and uncached docs
         for d in docs:
-            emb = self.cache.get(d['doc_id'], d['hash'])
-            if emb is None:
-                # compute and cache
-                emb = self.embedder.embed(d['text'])
-                self.cache.set(d['doc_id'], d['hash'], emb)
-            embeddings.append(emb)
-            doc_ids.append(d['doc_id'])
+
+            # Always store metadata
             self.metadata[d['doc_id']] = {
                 'text': d['text'],
                 'length': d['length'],
                 'filename': d['filename']
             }
-        if len(embeddings) == 0:
-            # nothing to index
+
+            cached = self.cache.get(d['doc_id'], d['hash'])
+            if cached is not None:
+                embeddings.append(cached)
+                doc_ids.append(d['doc_id'])
+            else:
+                texts_to_embed.append(d['text'])
+                ids_to_embed.append(d['doc_id'])
+                hashes_to_embed.append(d['hash'])  # correct hash
+
+        # STEP 2 — Batch embed all uncached docs
+        if texts_to_embed:
+            batch_embs = embed_batch_multiprocess(texts_to_embed)
+            for doc_id, emb, h in zip(ids_to_embed, batch_embs, hashes_to_embed):
+                # store in cache using correct text hash
+                self.cache.set(doc_id, h, emb)
+                embeddings.append(emb)
+                doc_ids.append(doc_id)
+
+        # Nothing to index?
+        if not embeddings:
             return
+
+        # STEP 3 — Build FAISS index
         embs = np.vstack(embeddings)
         embs = self.embedder.normalize(embs)
         self.index.build(embs, doc_ids)

@@ -1,17 +1,23 @@
 # Multi-Document Embedding Search Engine with Caching
 
-This project implements a lightweight, production-ready semantic search engine over 100–200 text documents using embeddings, caching, FAISS vector search, and a FastAPI retrieval API.
+This project implements a lightweight, production-ready semantic search engine over 100–200 text documents using embeddings, caching, FAISS vector search, FastAPI, and an optional Streamlit UI.
+
+---
 
 ## 🚀 Features
 
 * Preprocessing of raw text documents (cleaning, hashing, metadata)
 * Efficient embedding generation using **sentence-transformers/all-MiniLM-L6-v2**
-* **SQLite-based embedding cache** (no recomputation)
-* FAISS vector index with fallback NumPy cosine similarity
-* FastAPI `/search` endpoint
-* Ranking explanation (keyword overlap, ratio, length normalization)
-* Modular structure (`loader`, `embedder`, `cache`, `indexer`, `search_engine`, `api`)
-* 100+ sample documents included
+* **SQLite-based embedding cache** — no recomputation if unchanged
+* **FAISS vector index**, persisted to `faiss.index`
+* Automatic **NumPy cosine similarity fallback** if FAISS unavailable
+* **FastAPI `/search` endpoint** for semantic retrieval
+* **Ranking explanation** (keyword overlap, ratio, length normalization)
+* **Batch embedding with multiprocessing** for fast indexing
+* **Streamlit UI** for interactive search
+* **Evaluation script** for quality testing
+* **Unit tests included**
+* Modular, scalable codebase
 
 ---
 
@@ -28,7 +34,8 @@ MultiDocSearch/
 │   ├── document_loader/
 │   │   └── loader.py
 │   ├── embedder/
-│   │   └── embedder.py
+│   │   ├── embedder.py
+│   │   └── batch_embedder.py
 │   ├── indexer/
 │   │   └── faiss_index.py
 │   ├── retriever/
@@ -38,14 +45,22 @@ MultiDocSearch/
 │   │   └── hashing.py
 │   └── config.py
 │
+├── evaluation/
+│   └── evaluate.py
+│
+├── streamlit_app.py
+│
 ├── data/
-│   └── docs/        # 100+ .txt documents
+│   └── docs/        # 100+ .txt documents (ignored by git)
 │
 ├── tests/
-│   └── (to be added)
+│   ├── test_loader.py
+│   ├── test_embedder.py
+│   ├── test_cache.py
+│   └── test_search.py
 │
 ├── requirements.txt
-├── README.md (this file)
+├── README.md
 └── .gitignore
 ```
 
@@ -55,67 +70,114 @@ MultiDocSearch/
 
 Each document is cleaned and normalized:
 
-* Convert to lowercase
-* Remove HTML tags
-* Collapse multiple spaces
-* Compute SHA-256 hash
-* Collect metadata: filename, text length
+✔ Lowercase  
+✔ Remove HTML tags  
+✔ Collapse multiple spaces  
+✔ Compute SHA-256 hash  
+✔ Extract metadata (filename, length, doc_id)  
 
-This is implemented inside `src/document_loader/loader.py`.
+Implemented in:
+
+```
+src/document_loader/loader.py
+```
 
 ---
 
 ## ⚡ Embedding Generation
 
-We use **sentence-transformers/all-MiniLM-L6-v2**:
+Using:
 
-* Fast (40ms per document)
-* Small (22MB)
-* Good semantic quality
+```
+sentence-transformers/all-MiniLM-L6-v2
+```
 
-Embeddings are generated in `embedder/embedder.py`.
+Benefits:
+
+* Lightweight (22MB)
+* Fast
+* High semantic quality
+
+Implemented in:
+
+```
+src/embedder/embedder.py
+```
 
 ---
 
-## 💾 Caching System
+## 💾 Caching System (SQLite)
 
-To avoid recomputing embeddings, we use a **SQLite local cache**.
+To avoid recomputing embeddings:
 
-Cache entry example:
+Each cache entry stores:
 
 ```
-{
-  "doc_id": "doc_001",
-  "embedding": [...],
-  "hash": "sha256_hash",
-  "updated_at": timestamp
-}
+doc_id
+sha256_hash_of_cleaned_text
+embedding (pickled)
+updated_at timestamp
 ```
 
-**Cache behavior:**
+Behavior:
 
-* If hash unchanged → reuse cached embedding
-* If file hash changes → regenerate and update cache
+* If hash matches → reuse embedding  
+* If hash differs → regenerate + update cache  
 
-Implemented in `cache/cache_manager.py`.
+Implemented in:
+
+```
+src/cache/cache_manager.py
+```
 
 ---
 
-## 🔍 Vector Search (FAISS + Fallback)
+## 🔥 Batch Embedding With Multiprocessing
 
-Primary search backend: **FAISS IndexFlatIP**
+For uncached documents, embeddings are generated using:
 
-* Uses cosine similarity (normalized vectors)
+```
+src/embedder/batch_embedder.py
+```
 
-If FAISS not installed → automatic fallback to **NumPy cosine similarity**.
+Features:
 
-Implemented in `indexer/faiss_index.py`.
+* Uses multiprocessing.Pool  
+* Loads model once per worker  
+* Produces fast embeddings for 100–200 docs  
+* Integrated in SearchEngine (index_documents)
+
+---
+
+## 🔍 Vector Search (FAISS + fallback)
+
+Primary engine:
+
+**FAISS IndexFlatIP**  
+*Based on cosine similarity (with normalized embeddings)*
+
+If FAISS unavailable → fallback to NumPy cosine similarity.
+
+Index persistence:
+
+✔ On startup → load `faiss.index` if exists  
+✔ After indexing → save updated FAISS index  
+
+Implemented in:
+
+```
+src/indexer/faiss_index.py
+```
 
 ---
 
 ## 🔎 Retrieval API (FastAPI)
 
-Endpoint: `POST /search`
+Endpoint:
+
+```
+POST /search
+```
 
 Request:
 
@@ -126,38 +188,41 @@ Request:
 }
 ```
 
-Response:
+Response contains:
 
-```json
-{
-  "query": "machine learning basics",
-  "results": [
-    {
-      "doc_id": "doc_055",
-      "score": 0.62,
-      "preview": "document 055 ...",
-      "explanation": {
-        "keyword_overlap": ["machine", "learning"],
-        "overlap_ratio": 0.66,
-        "length_norm": 0.91
-      }
-    }
-  ]
-}
+* doc_id  
+* preview  
+* score  
+* metadata  
+* ranking explanation  
+
+API entrypoint:
+
+```
+src/api/main.py
 ```
 
 ---
 
 ## 🧠 Ranking Explanation
 
-For each document we compute:
+Each result includes:
 
-* **Keyword overlap** (simple token-based)
-* **Overlap ratio** = overlap / query_words
-* **Length normalization** (shorter docs slightly favored)
-* **Combined score** = 0.8 * cosine + 0.2 * length
+### ✔ Keyword overlap  
+### ✔ Overlap ratio  
+### ✔ Length normalization  
+### ✔ Combined score  
 
-Implemented in `retriever/search_engine.py`.
+Formula:
+```
+final_score = 0.8 * vector_score + 0.2 * length_norm
+```
+
+Implemented in:
+
+```
+src/retriever/search_engine.py
+```
 
 ---
 
@@ -169,15 +234,13 @@ Implemented in `retriever/search_engine.py`.
 pip install -r requirements.txt
 ```
 
-### 2. Run the API
+### 2. Run the API server
 
 ```
 uvicorn src.api.main:app --reload
 ```
 
-### 3. Test in browser
-
-Visit Swagger UI:
+### 3. Browse Swagger UI
 
 ```
 http://127.0.0.1:8000/docs
@@ -185,61 +248,102 @@ http://127.0.0.1:8000/docs
 
 ---
 
-## 💽 How Caching Works (Detailed)
+## 🌐 Streamlit UI
 
-On startup:
+Launch the frontend:
 
-1. Documents are loaded and hashed
-2. Cache is queried:
+```
+streamlit run streamlit_app.py
+```
 
-   * If entry exists and hash matches → load embedding
-   * Else → compute embedding and save to cache
-3. Embeddings are built into FAISS index
+Provides:
 
-Cache database: `embeddings_cache.db`
-
----
-
-## 🔧 Design Choices
-
-* **Sentence transformers** chosen for best performance/quality trade-off.
-* **SQLite** chosen for simplicity and reliability.
-* **FAISS** (or fallback NumPy) ensures fast retrieval.
-* **Modular code** for extensibility.
+* Search bar  
+* Top-K slider  
+* Score + explanation per result  
+* Clean, user‑friendly layout  
 
 ---
 
-## 🧪 Tests
+## 📊 Evaluation Script
 
-Unit tests are placed under:
+Run predefined evaluation queries:
+
+```
+python evaluation/evaluate.py
+```
+
+Validates:
+
+* Ranking quality  
+* Consistent vector search  
+* Correct semantic matches  
+
+---
+
+## 🧪 Unit Tests
+
+Located in:
 
 ```
 tests/
 ```
 
-(Will be added next.)
+Covers:
+
+* Loader  
+* Embedder  
+* Cache  
+* Search pipeline  
+
+Run:
+
+```
+pytest -q
+```
 
 ---
 
-## 📌 Next Steps (Bonus Features)
+## 💽 How Caching Works (Detailed)
 
-* Add Streamlit UI for searching
-* Persist FAISS index on disk
-* Add query expansion (WordNet or embedding similarity)
-* Multiprocessing batch embedding
-* Retrieval evaluation pipeline
+1. Load documents  
+2. Compute hash for each cleaned text  
+3. For each document:
+   - If cache has matching hash → load embedding  
+   - Else → compute embedding and store in cache  
+4. Build FAISS index from all embeddings  
+5. Save FAISS index to disk  
+
+---
+
+## 🔧 Design Choices
+
+* **MiniLM** for optimal speed vs accuracy  
+* **SQLite** for simple, reliable caching  
+* **FAISS** for high-performance vector search  
+* **Fallback cosine similarity** ensures cross-platform reliability  
+* **Modular code** for extensibility and clarity  
+
+---
+
+## 🧩 Next Optional Enhancements
+
+### ✔ Already Implemented:
+* Streamlit UI  
+* Persistent FAISS index  
+* Multiprocessing batch embedding  
+* Evaluation queries  
+* Unit tests  
+
+### ❌ Pending (Optional Bonus):
+* Query expansion (WordNet or embedding-based)  
 
 ---
 
 ## ✔️ Assignment Compliance
 
-This project covers all mandatory requirements:
+### All Mandatory Requirements — **DONE**  
+### Most Bonus Requirements — **DONE**  
+Optional: Query Expansion (not included)
 
-* Preprocessing
-* Embedding generation
-* Local cache
-* Vector search
-* Retrieval API
-* Ranking explanation
-* Modular structure
-
+---
