@@ -15,7 +15,7 @@ Notes:
   a function.
 - This function returns a single numpy array of shape (len(texts), dim).
 """
-
+#batch_embedder
 from typing import List, Optional
 import math
 import numpy as np

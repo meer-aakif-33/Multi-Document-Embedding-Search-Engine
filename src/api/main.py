@@ -1,3 +1,4 @@
+#main.py
 from ..indexer.faiss_index import FaissIndex
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -39,9 +40,6 @@ def search(req: SearchRequest):
 
     return ENGINE.search(req.query, req.top_k)
 
-"""
-
-"""
 
 if __name__ == "__main__":
     uvicorn.run("src.api.main:app", host="0.0.0.0", port=8000, reload=True)
