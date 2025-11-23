@@ -1,3 +1,4 @@
+#text normalization
 import re
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
