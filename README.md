@@ -289,6 +289,12 @@ Located in:
 tests/
 ```
 
+**Run unit tests**:
+```
+pip install pytest
+pytest -q
+```
+
 ## 💽 How Caching Works (Detailed)
 
 1. Load documents  
